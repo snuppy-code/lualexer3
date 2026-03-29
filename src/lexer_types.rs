@@ -1,0 +1,480 @@
+// https://www.lua.org/manual/5.3/manual.html
+
+#[derive(Debug, PartialEq)]
+pub enum TokenKind<'i> {
+    Keyword(Keyword),
+    Symbol(Symbol),
+    LiteralString(&'i str),
+    NumericConstant(NumericConstant),
+    Identifier,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Keyword {
+//  and       break     do        else      elseif    end
+//  false     for       function  goto      if        in
+//  local     nil       not       or        repeat    return
+//  then      true      until     while
+    And,       Break,     Do,        Else,      Elseif,    End,
+    False,     For,       Function,  Goto,      If,        In,
+    Local,     Nil,       Not,       Or,        Repeat,    Return,
+    Then,      True,      Until,     While,
+}
+impl Keyword {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "and" => Some(Keyword::And),
+            "break" => Some(Keyword::Break),
+            "do" => Some(Keyword::Do),
+            "elseif" => Some(Keyword::Elseif),
+            "else" => Some(Keyword::Else),
+            "end" => Some(Keyword::End),
+            "false" => Some(Keyword::False),
+            "for" => Some(Keyword::For),
+            "function" => Some(Keyword::Function),
+            "goto" => Some(Keyword::Goto),
+            "if" => Some(Keyword::If),
+            "in" => Some(Keyword::In),
+            "local" => Some(Keyword::Local),
+            "nil" => Some(Keyword::Nil),
+            "not" => Some(Keyword::Not),
+            "or" => Some(Keyword::Or),
+            "repeat" => Some(Keyword::Repeat),
+            "return" => Some(Keyword::Return),
+            "then" => Some(Keyword::Then),
+            "true" => Some(Keyword::True),
+            "until" => Some(Keyword::Until),
+            "while" => Some(Keyword::While),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Symbol {
+//  +               -           *               /                   %           ^               #
+//  &               ~           |               <<                  >>          //
+//  ==              ~=          <=              >=                  <           >               =
+//  (               )           {               }                   [           ]               ::
+//  ;               :           ,               .                   ..          ...
+    Plus,           Dash,       Star,           Slash,              Percent,    Caret,          Hashtag,
+    Ampersand,      Tilde,      Pipe,           LShift,             RShift,     SlashSlash,
+    EqualsEquals,   NotEquals,  LessOrEquals,   GreaterOrEquals,    LessThan,   GreaterThan,    Equals,
+    LParen,         RParen,     LCurly,         RCurly,             LBracket,   RBracket,       ColonColon,
+    Semicolon,      Colon,      Comma,          Dot,                DotDot,     DotDotDot,
+}
+impl Symbol {
+    pub fn to_str(sym: Symbol) -> &'static str {
+        match sym {
+            Symbol::Plus => "+",
+            Symbol::Dash => "-",
+            Symbol::Star => "*",
+            Symbol::Slash => "/",
+            Symbol::Percent => "%",
+            Symbol::Caret => "^",
+            Symbol::Hashtag => "#",
+            Symbol::Ampersand => "&",
+            Symbol::Tilde => "~",
+            Symbol::Pipe => "|",
+            Symbol::LShift => "<<",
+            Symbol::RShift => ">>",
+            Symbol::SlashSlash => "//",
+            Symbol::EqualsEquals => "==",
+            Symbol::NotEquals => "~=",
+            Symbol::LessOrEquals => "<=",
+            Symbol::GreaterOrEquals => ">=",
+            Symbol::LessThan => "<",
+            Symbol::GreaterThan => ">",
+            Symbol::Equals => "=",
+            Symbol::LParen => "(",
+            Symbol::RParen => ")",
+            Symbol::LCurly => "{",
+            Symbol::RCurly => "}",
+            Symbol::LBracket => "[",
+            Symbol::ColonColon => "::",
+            Symbol::RBracket => "]",
+            Symbol::Semicolon => ";",
+            Symbol::Colon => ":",
+            Symbol::Comma => ",",
+            Symbol::Dot => ".",
+            Symbol::DotDot => "..",
+            Symbol::DotDotDot => "...",
+        }
+    }
+    pub fn from_str(s: &str) -> Option<Symbol> {
+        match s {
+            "+" => Some(Symbol::Plus),
+            "-" => Some(Symbol::Dash),
+            "*" => Some(Symbol::Star),
+            "/" => Some(Symbol::Slash),
+            "%" => Some(Symbol::Percent),
+            "^" => Some(Symbol::Caret),
+            "#" => Some(Symbol::Hashtag),
+            "&" => Some(Symbol::Ampersand),
+            "~" => Some(Symbol::Tilde),
+            "|" => Some(Symbol::Pipe),
+            "<<" => Some(Symbol::LShift),
+            ">>" => Some(Symbol::RShift),
+            "//" => Some(Symbol::SlashSlash),
+            "==" => Some(Symbol::EqualsEquals),
+            "~=" => Some(Symbol::NotEquals),
+            "<=" => Some(Symbol::LessOrEquals),
+            ">=" => Some(Symbol::GreaterOrEquals),
+            "<" => Some(Symbol::LessThan),
+            ">" => Some(Symbol::GreaterThan),
+            "=" => Some(Symbol::Equals),
+            "(" => Some(Symbol::LParen),
+            ")" => Some(Symbol::RParen),
+            "{" => Some(Symbol::LCurly),
+            "}" => Some(Symbol::RCurly),
+            "[" => Some(Symbol::LBracket),
+            "::" => Some(Symbol::ColonColon),
+            "]" => Some(Symbol::RBracket),
+            ";" => Some(Symbol::Semicolon),
+            ":" => Some(Symbol::Colon),
+            "," => Some(Symbol::Comma),
+            "." => Some(Symbol::Dot),
+            ".." => Some(Symbol::DotDot),
+            "..." => Some(Symbol::DotDotDot),
+            _ => None,
+        }
+    }
+}
+
+
+#[derive(Debug, PartialEq)]
+pub enum NumericConstant {
+    Integer(i64),
+    Float(f64),
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Span<'i>(pub &'i str);
+
+#[derive(Debug, PartialEq)]
+pub struct Token<'i> {
+    kind: TokenKind<'i>,
+    span: Span<'i>,
+}
+impl<'i> Token<'i> {
+    pub fn new(kind: TokenKind<'i>, span: Span<'i>) -> Self {
+        return Token { kind, span };
+    }
+    pub fn get_kind(&self) -> &TokenKind<'i> {
+        return &self.kind;
+    }
+    pub fn get_span(&self) -> Span<'i> {
+        return self.span;
+    }
+}
+
+#[derive(Debug)]
+pub struct Lexer<'i> {
+    input: &'i str,
+    view: &'i str, // substring of input used in parsing
+    lexed: Vec<Token<'i>>,
+}
+
+impl<'i> Lexer<'i> {
+    pub fn new(input: &'i str) -> Lexer<'i> {
+        Lexer {
+            input: input,
+            view: input,
+            lexed: Vec::new(),
+        }
+    }
+
+    pub fn get_internal_view(&self) -> &'i str {
+        return &self.view;
+    }
+    pub fn get_internal_lexed(&self) -> &Vec<Token<'i>> {
+        return &self.lexed;
+    }
+    pub fn lex_to_end(&mut self) {
+        
+        loop {
+            if self.lex_one() == false {
+                break;
+            }
+        }
+        if self.view.len() > 0 {
+            panic!("failed lexing all, remains:\n{}",self.view);
+        }
+    }
+    pub fn lex_one(&mut self) -> bool {
+        self.skip_whitespace();
+
+        let res = self
+            .lex_identifier_or_keyword()
+            .or_else(|| self.lex_numeric_constant())
+            .or_else(|| self.lex_short_literal_string())
+            .or_else(|| self.lex_long_literal_string())
+            .or_else(|| self.lex_symbol())
+            ;
+
+        if let Some(token) = res {
+            self.lexed.push(token);
+            true
+        } else {
+            false
+        }
+    }
+    pub fn skip_whitespace(&mut self) {
+        self.view = self.view.trim_start();
+    }
+    pub fn lex_identifier_or_keyword(&mut self) -> Option<Token<'i>> {
+        let mut found = None;
+
+        let chars = self.view.char_indices();
+        for (c_start_byte,c) in chars {
+            if c_start_byte == 0 && !c.is_alphabetic() {
+                break;
+            }
+            if ! (c.is_alphanumeric() || c == '_') {
+                break;
+            }
+            found = Some(
+                &self.view[..self.view.ceil_char_boundary(c_start_byte+c.len_utf8())]//wouldn't +1 work just as well here?
+            )
+        };
+
+        found.and_then(|s| {
+            self.view = &self.view[s.len()..];
+
+            if let Some(keyword) = Keyword::from_str(s) {
+                Some(Token::new(TokenKind::Keyword(keyword), Span(s)))
+            } else {
+                Some(Token::new(TokenKind::Identifier, Span(s)))
+            }
+        })
+    }
+    pub fn lex_numeric_constant(&mut self) -> Option<Token<'i>> {
+        None
+    }
+    /// A short literal string can be delimited by matching single or double quotes, and can contain the following C-like escape sequences: '\a' (bell), '\b' (backspace), '\f' (form feed), '\n' (newline), '\r' (carriage return), '\t' (horizontal tab), '\v' (vertical tab), '\\' (backslash), '\"' (quotation mark [double quote]), and '\'' (apostrophe [single quote]).
+    /// 
+    /// The escape sequence '\z' skips the following span of white-space characters, including line breaks; it is particularly useful to break and indent a long literal string into multiple lines without adding the newlines and spaces into the string contents. A short literal string cannot contain unescaped line breaks nor escapes not forming a valid escape sequence.
+    /// 
+    /// We can specify any byte in a short literal string by its numeric value (including embedded zeros). This can be done with the escape sequence \xXX, where XX is a sequence of exactly two hexadecimal digits, or with the escape sequence \ddd, where ddd is a sequence of up to three decimal digits. (Note that if a decimal escape sequence is to be followed by a digit, it must be expressed using exactly three digits.) 
+    /// 
+    /// The UTF-8 encoding of a Unicode character can be inserted in a literal string with the escape sequence \u{XXX} (note the mandatory enclosing brackets), where XXX is a sequence of one or more hexadecimal digits representing the character code point.
+    pub fn lex_short_literal_string(&mut self) -> Option<Token<'i>> {
+        let mut chars = self.view.char_indices();
+        let (_, first_c) = chars.next()?;
+        
+        if first_c != '"' {
+            return None;
+        }
+        let mut found = None;
+        for (c_start_byte,c) in chars {
+            if c == '\n' {
+                break;
+            }
+            found = Some(
+                &self.view[..self.view.ceil_char_boundary(c_start_byte+c.len_utf8())]//wouldn't +1 work just as well here?
+            );
+            if c == '"' {
+                break;
+            }
+        }
+        found.and_then(|s| {
+            if !s.ends_with('"') {
+                panic!("unterminated single line string!");
+            }
+            self.view = &self.view[s.len()..];
+            Some(Token::new(TokenKind::LiteralString(&s[1..(s.len()-1)]), Span(s))) // grab contents between the ""
+        })
+    }
+    /// For convenience, when the opening long bracket is immediately followed by a newline, the newline is not included in the string. (same does not apply for short string)
+    pub fn lex_long_literal_string(&mut self) -> Option<Token<'i>> {
+        let mut remains = self.view;
+        //dbg!(remains);
+        
+        remains = remains.strip_prefix('[')?;
+        //dbg!(remains);
+
+        let mut opening_equals = 0;
+        while let Some(next_remains) = remains.strip_prefix('=') {
+            opening_equals += 1;
+            remains = next_remains;
+        }
+        //dbg!(opening_equals);
+
+        remains = remains.strip_prefix('[')?;
+        let span_without_opening = remains;
+
+        let mut found_closing = false;
+        while !remains.is_empty() {
+            println!("remains is not empty !");
+            //dbg!(remains);
+            let Some(potential_closing_start) = remains.find(']') else {
+                println!("we BREAKING");
+                break // when no more potential endings, end while loop
+            };
+            remains = &remains[potential_closing_start..];
+            //dbg!(remains);
+            let mut check_close = remains.strip_prefix(']').expect("`remains.find` check above ensures this will not panic");
+            //dbg!(check_close);
+
+            let mut closing_equals = 0;
+            while let Some(next_check_close) = check_close.strip_prefix('=') {
+                closing_equals += 1;
+                check_close = next_check_close;
+            }
+            //dbg!(closing_equals);
+            //dbg!(check_close);
+            //dbg!(remains);
+
+            if dbg!(closing_equals != opening_equals) {
+                remains = dbg!(&remains[1..]);
+                continue;
+            }
+            if dbg!(!check_close.starts_with(']')) {
+                remains = dbg!(&remains[1..]); 
+                continue;
+            }
+            remains = &remains[(2+opening_equals)..];
+            //dbg!(remains);
+            found_closing = true;
+            break;
+        }
+        println!("Loopover!");
+
+        if !found_closing {
+            println!("Didn't find any goddamn closing!");
+            return None;
+        }
+
+        let span_len = self.view.len() - remains.len();
+        let span = &self.view[..span_len];
+        let end_len = 2+opening_equals;
+        let inner_content = &span_without_opening[..span_without_opening.len()-end_len];
+
+        dbg!(span);
+        dbg!(inner_content);
+
+        self.view = dbg!(&self.view[span.len()..]);
+        Some(Token::new(TokenKind::LiteralString(inner_content), Span(span)))
+    }
+    // pub fn lex_long_literal_string(&mut self) -> Option<Token<'i>> {
+    //     // looking at bytes is ok here because we look for '[', ']', '=', which are all ascii and-
+    //     // cannot be confused for any part of anything that utf8 encodes anything else to
+    //     let bytes = self.view.as_bytes();
+        
+    //     if bytes.first() != Some(&b'[') {
+    //         return None;
+    //     }
+    //     let mut opening_equals = 0;
+    //     let mut opened = false;
+    //     for &b in bytes[1..].iter() {
+    //         match b {
+    //             b'=' => opening_equals += 1,
+    //             b'[' => {
+    //                 opened = true;
+    //                 break
+    //             },
+    //             _ => return None, // e.g. [==a or [a
+    //         }
+    //     }
+    //     if !opened {
+    //         return None; // didn't complete the opening to the string
+    //     }
+
+    //     let start_length = opening_equals+2;
+    //     let mut search_place = start_length;
+    //     while let Some(pos) = (&self.view[search_place..]).find(']') {
+    //         let pos = search_place+pos;
+    //         if start_length > (&self.view[pos..]).len() {
+    //             break; // the end sequence (same length as start sequence) cannot fit in what remains
+    //         }
+    //         let potential_closing = &bytes[pos..=pos+start_length];
+    //         println!("Checking {}",str::from_utf8(potential_closing).unwrap());
+
+    //         let found_closing = potential_closing[pos+start_length] == b']' &&
+    //             potential_closing[(pos+1)..pos+start_length].iter().all(|&b| b == b'=');
+            
+    //         if !found_closing {
+    //             search_place = pos + 1; // false match, keep looking
+    //             continue;
+    //         }
+
+    //         let inner_content = &self.view[start_length..pos+start_length];
+    //         let span = &self.view[..pos+start_length];
+    //         println!("Succeeded, span: {}",span);
+    //     }
+
+    //     None
+    // }
+    pub fn lex_symbol(&mut self) -> Option<Token<'i>> {
+        let symbol_patterns = [
+            (Symbol::Plus, "+", 1),
+            (Symbol::Dash, "-", 1),
+            (Symbol::Star, "*", 1),
+            (Symbol::Slash, "/", 1),
+            (Symbol::Percent, "%", 1),
+            (Symbol::Caret, "^", 1),
+            (Symbol::Hashtag, "#", 1),
+            (Symbol::Ampersand, "&", 1),
+            (Symbol::Tilde, "~", 1),
+            (Symbol::Pipe, "|", 1),
+            (Symbol::LShift, "<<", 2),
+            (Symbol::RShift, ">>", 2),
+            (Symbol::SlashSlash, "//", 2),
+            (Symbol::EqualsEquals, "==", 2),
+            (Symbol::NotEquals, "~=", 2),
+            (Symbol::LessOrEquals, "<=", 2),
+            (Symbol::GreaterOrEquals, ">=", 2),
+            (Symbol::LessThan, "<", 1),
+            (Symbol::GreaterThan, ">", 1),
+            (Symbol::Equals, "=", 1),
+            (Symbol::LParen, "(", 1),
+            (Symbol::RParen, ")", 1),
+            (Symbol::LCurly, "{", 1),
+            (Symbol::RCurly, "}", 1),
+            (Symbol::LBracket, "[", 1),
+            (Symbol::RBracket, "]", 1),
+            (Symbol::Semicolon, ";", 1),
+            (Symbol::Colon, ":", 1),
+            (Symbol::ColonColon, "::", 2),
+            (Symbol::Comma, ",", 1),
+            (Symbol::Dot, ".", 1),
+            (Symbol::DotDot, "..", 2),
+            (Symbol::DotDotDot, "...", 3),
+        ];
+
+        let mut found: Option<(Symbol, u8, &'i str)> = None;
+        for (kind, str_pattern, preference) in symbol_patterns {
+                        
+            if str_pattern.len() > self.view.len() {
+                continue;
+            }
+
+            let this_token_view = &self.view[0..=str_pattern.len()-1];
+            let matches_this_pattern = this_token_view == str_pattern;
+
+            if !matches_this_pattern {
+                continue;
+            }
+            if found.is_none() {
+                found = Some((kind, preference, this_token_view));
+                continue;
+            }
+
+            let (found_kind,found_preference, _) = found.unwrap();
+
+            if kind == found_kind && preference > found_preference {
+                found = Some((kind, preference, this_token_view));
+                continue;
+            }
+        };
+        
+        if let Some((kind, _, token_view)) = found {
+            // not -1 after token_view.len(), because while token_view.len() is one past token_view, that is perfect as we want the index 1 after token_view
+            // more of a note to self
+            self.view = &self.view[token_view.len()..=(self.view.len()-1)];
+            Some( Token::new(TokenKind::Symbol(kind), Span(token_view)) )
+        } else {
+            None
+        }
+    }
+}
