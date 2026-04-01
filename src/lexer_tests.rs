@@ -78,7 +78,23 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_short_string_escape() {
+    fn test_z_short_string_escape() {
+        let s = r#""a\z   
+b""#;
+        let s_unescaped = r#"a\z   
+b"#;
+        let s_escaped = r#"ab"#;
+        let mut l = Lexer::new(s);
+        l.lex_to_end();
+        let mut i = l.iter_tokens().peekable();
+        assert_eq!(i.peek().unwrap().get_kind(), &TokenKind::LiteralString(LiteralString::UnescapedShort(s_unescaped)));
+        assert_eq!(i.peek().unwrap().get_span(), Span(s));
+        let lit_str = i.next().unwrap().get_kind().unwrap_literal_string();
+        assert_eq!(lit_str.escape(), LiteralString::Escaped(String::from(s_escaped)));
+    }
+
+    #[test]
+    fn test_complex_short_string_escape() {
         let s = r#""a\z   
 \
 \n
