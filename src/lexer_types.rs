@@ -233,7 +233,7 @@ impl<'i> LiteralString<'i> {
             println!("----- new iteration !");
             let x = str::from_utf8(&escaped[seen..]).unwrap();
             dbg!(x);
-            let Some(backslash_pos) = escaped[seen..].iter().position(|&v| v==b'\\') else {
+            let Some(mut backslash_pos) = escaped[seen..].iter().position(|&v| v==b'\\') else {
                 println!("Failed to find another escape!");
                 break;
             };
