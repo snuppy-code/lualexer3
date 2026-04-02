@@ -237,7 +237,7 @@ impl<'i> LiteralString<'i> {
                 println!("Failed to find another escape!");
                 break;
             };
-
+            dbg!(backslash_pos);
             let x = &str::from_utf8(&escaped[seen..]).unwrap()[backslash_pos..=backslash_pos];
             dbg!(x);
 
