@@ -1,4 +1,4 @@
-use std::{io::Bytes, str::from_utf8};
+use std::{f32::consts::E, io::Bytes, str::from_utf8};
 
 #[derive(Debug, PartialEq)]
 pub enum TokenKind<'i> {
@@ -873,6 +873,105 @@ impl<'i> Lexer<'i> {
                 }
             }
         }
+        panic!("Unclosed long comment !");
+    }
+    fn skip_comments_three(&mut self) {
+        let bytes = self.view.as_bytes();
+        
+        if !bytes.starts_with(b"--") {
+            return;
+        }
+
+        let mut cursor = 2;
+        let mut is_long = false;
+        let mut opening_eq = 0;
+
+        if bytes.get(cursor) == Some(&b'[') {
+            cursor+=1;
+            while bytes.get(cursor) == Some(&b'=') {
+                cursor+=1;
+                opening_eq+=1;
+            }
+            if bytes.get(cursor) == Some(&b'[') {
+                cursor+=1;
+                is_long = true;
+            }
+        }
+
+        // skip short comment
+        if !is_long {
+            if let Some(newline_pos) = (&bytes[cursor..]).iter().position(|&b| b==b'\n') {
+                self.view = &self.view[cursor+newline_pos+1 ..];
+            } else {
+                self.view = &self.view[self.view.len()..]; // we done,,, end of file
+            }
+            return;
+        }
+        
+        // skip long comment
+        let mut end_seq = vec![b']'];
+        end_seq.extend_from_slice(&b"=".repeat(opening_eq));
+        end_seq.push(b']');
+
+        assert_eq!(end_seq.len(),opening_eq+2);
+
+        if let Some(end_start) = bytes.windows(end_seq.len()).position(|bs| bs == &end_seq) {
+            self.view = &self.view[end_start+end_seq.len()..];
+            return;
+        }
+
+        panic!("Unclosed long comment !");
+    }
+    fn skip_comments(&mut self) {
+        let bytes = self.view.as_bytes();
+        
+        if !bytes.starts_with(b"--") {
+            return;
+        }
+
+        let mut cursor = 2;
+        let mut is_long = false;
+        let mut opening_eq = 0;
+
+        if bytes.get(cursor) == Some(&b'[') {
+            cursor+=1;
+            while bytes.get(cursor) == Some(&b'=') {
+                cursor+=1;
+                opening_eq+=1;
+            }
+            if bytes.get(cursor) == Some(&b'[') {
+                cursor+=1;
+                is_long = true;
+            }
+        }
+
+        // skip short comment
+        if !is_long {
+            if let Some(newline_pos) = (&bytes[cursor..]).iter().position(|&b| b==b'\n') {
+                self.view = &self.view[cursor+newline_pos+1 ..];
+            } else {
+                self.view = &self.view[self.view.len()..]; // we done,,, end of file
+            }
+            return;
+        }
+        
+        // skip long comment
+        let mut current = cursor;
+        while let Some(bracket_pos) = bytes[current..].iter().position(|&b| b==b']') {
+            current+=bracket_pos+1;
+            
+            let mut closing_eq = 0;
+            while bytes.get(current) == Some(&b'=') {
+                closing_eq += 1;
+                current += 1;
+            }
+
+            if closing_eq == opening_eq && bytes.get(current) == Some(&b']') {
+                self.view = &self.view[current+1..];
+                return;
+            }
+        }
+
         panic!("Unclosed long comment !");
     }
 }
