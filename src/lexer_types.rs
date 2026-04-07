@@ -421,8 +421,7 @@ impl<'i> Lexer<'i> {
         }
     }
     fn lex_one(&mut self) -> bool {
-        self.skip_whitespace();
-        self.skip_comments(); // not 100% confident this is correct
+        while self.skip_whitespace() || self.skip_comments() { }
 
         let res = self
             .lex_identifier_or_keyword()
@@ -439,8 +438,10 @@ impl<'i> Lexer<'i> {
             false
         }
     }
-    pub fn skip_whitespace(&mut self) {
+    pub fn skip_whitespace(&mut self) -> bool {
+        let l1 = self.view.len();
         self.view = self.view.trim_start();
+        return l1 != self.view.len()
     }
     pub fn lex_identifier_or_keyword(&mut self) -> Option<Token<'i>> {
         let mut found = None;
@@ -486,51 +487,34 @@ impl<'i> Lexer<'i> {
         };
     }
     pub fn lex_short_literal_string(&mut self) -> Option<Token<'i>> {
-        let remains = self.view.as_bytes();
-        let mut quote_kind = None;
-        let Some(mut remains) = remains.strip_prefix(b"\"")
-            .inspect(|_| quote_kind = Some(b'"'))
-            .or_else(|| {
-                remains.strip_prefix(b"\'").inspect(|_| quote_kind = Some(b'\''))
-            })
-        else {
+        let bytes = self.view.as_bytes();
+        
+        let Some(&quote @ (b'\"' | b'\'')) = bytes.get(0) else {
             return None;
         };
-        let quote_kind = quote_kind.expect("if code above is correct, this should never be None");
-        let contents_without_opening = remains;
-        let mut raw_contents = None;
 
-        while !remains.is_empty() {
-            let Some(maybe_end) = remains.iter().position(|&v| v==quote_kind) else {
-                // while loop still running, so we haven't found end, and now there's no more potential ends left
-                // println!("Failed to find the end!");
-                return None;
-            };
+        let mut last_q_pos = 1;
+        let mut found_end = false;
+        while let Some(new_q_pos) = bytes.iter().enumerate().position(|(i,&b)| b==quote && i>last_q_pos) {
+            
+            // imprecise lower bound, which is okay because we look backwards through the iterator.
+            let bslashes = (&bytes[last_q_pos..new_q_pos]).iter()
+                .rev()
+                .take_while(|&&v| v == b'\\')
+                .fold(0_u64, |n,_|n+1);
 
-            // ..z\\" is not the end of a string, but ..g\\\" is. check for even number of continuous backslashes
-            let mut backtrack_check = maybe_end -1;
-            let mut backslashes = 0;
-            while (remains[backtrack_check] == b'\\') && (backtrack_check > 0) {
-                backslashes+=1;
-                backtrack_check -=1;
-            }
-            if backslashes%2 == 0 || backslashes == 0 {
-                // println!("found the end - no or even backslashes !");
-                raw_contents = Some(&contents_without_opening[..contents_without_opening.len()-1]);
+            last_q_pos = new_q_pos;
+
+            if bslashes%2 == 0 {
+                found_end = true;
                 break;
-            } else {
-                // THIS IS NOT THE END !! KEEP LOOKING FORWARDS!!
-                // println!("Trying again - odd backslashes");
-                remains = &remains[maybe_end+1..];
-                continue;
             }
         }
+        if !found_end {
+            panic!("Unclosed short string!");
+        }
         
-        let Some(raw_inner_contents) = raw_contents else {
-            return None;
-        };
-        let contents = str::from_utf8(raw_inner_contents).expect("something dealing with bytes shat itself above");
-
+        let contents = str::from_utf8(&bytes[1..last_q_pos]).unwrap();
         let span = &self.view[..contents.len()+2];
         let contents_tokenkind = TokenKind::LiteralString(LiteralString::UnescapedShort(contents));
 
@@ -713,11 +697,11 @@ impl<'i> Lexer<'i> {
             None
         }
     }
-    fn skip_comments(&mut self) {
+    fn skip_comments(&mut self) -> bool {
         let bytes = self.view.as_bytes();
         
         if !bytes.starts_with(b"--") {
-            return;
+            return false;
         }
 
         let mut cursor = 2;
@@ -743,7 +727,7 @@ impl<'i> Lexer<'i> {
             } else {
                 self.view = &self.view[self.view.len()..]; // we done,,, end of file
             }
-            return;
+            return true;
         }
         
         // skip long comment
@@ -759,7 +743,7 @@ impl<'i> Lexer<'i> {
 
             if closing_eq == opening_eq && bytes.get(current) == Some(&b']') {
                 self.view = &self.view[current+1..];
-                return;
+                return true;
             }
         }
 
