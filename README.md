@@ -3,7 +3,7 @@ I'm workin 'ere!
 
 Resources:
 - https://www.lua.org/manual/5.3/manual.html
-- https://www.lua.org/source/5.3/.
+- https://www.lua.org/source/5.3/
 
 
 Current problems/weaknesses:
