@@ -491,16 +491,51 @@ impl<'i> Lexer<'i> {
         let bytes = self.view.as_bytes();
         let mut cursor = 0;
         
-        let mut is_hex_const = false;
-        if bytes.starts_with(b"0x") || bytes.starts_with(b"0X") {
-            cursor+=2;
-            is_hex_const = true;
+        if !(bytes.starts_with(b"0x") || bytes.starts_with(b"0X")) { // normal int or float constant
+            let mut number_bytes = Vec::new();
+            while let Some(&b) = bytes.get(cursor) {
+                if !b.is_ascii_digit() {
+                    break;
+                }
+                cursor+=1;
+                number_bytes.push(b);
+            }
+
+            if bytes.get(cursor) != Some(&b'.') {
+                if number_bytes.len() == 0 {
+                    return None;
+                }
+                let int_part_s = str::from_utf8(&number_bytes).unwrap();
+                let value = i64::from_str_radix(int_part_s, 10).unwrap();
+                let kind = TokenKind::NumericConstant(NumericConstant::Integer(value));
+                let span = &self.view[..cursor];
+                self.view = &self.view[cursor..];
+                
+                return Some(Token::new(kind, Span(span)));
+            }
+            cursor+=1;
+            number_bytes.push(b'.');
+
+            while let Some(&b) = bytes.get(cursor) {
+                if !b.is_ascii_digit() {
+                    break;
+                }
+                cursor+=1;
+                number_bytes.push(b);
+            }
+
+            let number_s = str::from_utf8(&number_bytes).unwrap();
+            let value = number_s.parse::<f64>().unwrap();
+            let kind = TokenKind::NumericConstant(NumericConstant::Float(value));
+            let span = &self.view[..cursor];
+            self.view = &self.view[cursor..];
+            
+            return Some(Token::new(kind, Span(span)));
         }
-        
-        if !is_hex_const {
-            todo!("normal float or int literal");
-        }
-        
+        // is hex constant
+        cursor+=2;
+
+        let mut internally_int = true;
         let mut int_part_b = Vec::new();
         let mut frac_part_b = Vec::new();
         let mut exp_part_b = Vec::new();
@@ -512,8 +547,9 @@ impl<'i> Lexer<'i> {
             cursor+=1;
             int_part_b.push(b);
         }
-        
+
         if bytes.get(cursor) == Some(&b'.') { // frac part
+            internally_int = true;
             cursor+=1;
 
             while let Some(&b) = bytes.get(cursor) {
@@ -530,6 +566,7 @@ impl<'i> Lexer<'i> {
         }
 
         if bytes.get(cursor) == Some(&(b'p'|b'P')) { // exp part
+            internally_int = true;
             cursor+=1;
 
             match bytes.get(cursor) {
@@ -557,27 +594,42 @@ impl<'i> Lexer<'i> {
             }
         }
 
-        let mut significand = 0.;
-        if int_part_b.len() > 0 {
-            let int_part_s = String::from_utf8(int_part_b).expect("Invalid utf8 in integer part");
-            let int_part = i64::from_str_radix(&int_part_s, 16).unwrap() as f64;
-            significand+=int_part;
+        if internally_int {
+            let value = i64::from_str_radix(str::from_utf8(&int_part_b).unwrap(), 16).unwrap();
+            let kind = TokenKind::NumericConstant(NumericConstant::Integer(value));
+            let span = &self.view[..cursor];
+            self.view = &self.view[cursor..];
+            
+            return Some(Token::new(kind, Span(span)));
         }
-        if frac_part_b.len() > 0 {
-            let frac_part_s = String::from_utf8(frac_part_b).expect("Invalid utf8 in fractional part");
-            let frac_part = {
-                let x = i64::from_str_radix(&frac_part_s, 16).unwrap();
-                (x as f64) / 16_f64.powi(frac_part_s.len() as i32)
-            };
-            significand+=frac_part;
-        }
-        let mut value = significand;
-        if exp_part_b.len() > 0 {
-            let exp_part_s = String::from_utf8(exp_part_b).expect("Invalid utf8 in exponent part");
-            let exp_part = i32::from_str_radix(&exp_part_s, 10).unwrap();
-            value = significand*2_f64.powi(exp_part);
-        }
-        
+
+        let s = {
+            let mut s= String::from("0x");
+
+            if int_part_b.len() > 0 {
+                let int_part_s = str::from_utf8(&int_part_b).expect("Invalid utf8 in integer part");
+                s.push_str(int_part_s);
+            } else {
+                s.push('0');
+            }
+            s.push('.');
+            if frac_part_b.len() > 0 {
+                let frac_part_s = str::from_utf8(&frac_part_b).expect("Invalid utf8 in fractional part");
+                s.push_str(frac_part_s);
+            } else {
+                s.push('0');
+            }
+            s.push('p');
+            if exp_part_b.len() > 0 {
+                let exp_part_s = str::from_utf8(&exp_part_b).expect("Invalid utf8 in exponent part");
+                s.push_str(&exp_part_s);
+            } else {
+                s.push_str("0");
+            }
+
+            s
+        };
+        let value = hexf_parse::parse_hexf64(&s, false).unwrap();
         let kind = TokenKind::NumericConstant(NumericConstant::Float(value));
         let span = &self.view[..cursor];
         self.view = &self.view[cursor..];
