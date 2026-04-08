@@ -1,14 +1,14 @@
 use crate::util::*;
 
 #[derive(Debug, PartialEq)]
-pub enum TokenKind<'i> {
+pub enum TokenKind {
     Keyword(Keyword),
     Symbol(Symbol),
-    LiteralString(LiteralString<'i>),
+    LiteralString(LiteralString),
     NumericConstant(NumericConstant),
     Identifier,
 }
-impl<'i> TokenKind<'i> {
+impl TokenKind {
     pub fn get_keyword(&self) -> Option<&Keyword> {
         match self {
             TokenKind::Keyword(k) => Some(k),
@@ -75,35 +75,6 @@ pub enum Keyword {
     False,     For,       Function,  Goto,      If,        In,
     Local,     Nil,       Not,       Or,        Repeat,    Return,
     Then,      True,      Until,     While,
-}
-impl Keyword {
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "and" => Some(Keyword::And),
-            "break" => Some(Keyword::Break),
-            "do" => Some(Keyword::Do),
-            "elseif" => Some(Keyword::Elseif),
-            "else" => Some(Keyword::Else),
-            "end" => Some(Keyword::End),
-            "false" => Some(Keyword::False),
-            "for" => Some(Keyword::For),
-            "function" => Some(Keyword::Function),
-            "goto" => Some(Keyword::Goto),
-            "if" => Some(Keyword::If),
-            "in" => Some(Keyword::In),
-            "local" => Some(Keyword::Local),
-            "nil" => Some(Keyword::Nil),
-            "not" => Some(Keyword::Not),
-            "or" => Some(Keyword::Or),
-            "repeat" => Some(Keyword::Repeat),
-            "return" => Some(Keyword::Return),
-            "then" => Some(Keyword::Then),
-            "true" => Some(Keyword::True),
-            "until" => Some(Keyword::Until),
-            "while" => Some(Keyword::While),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -205,26 +176,12 @@ pub enum NumericConstant {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum LiteralString<'i> {
-    Escaped(String),
-    UnescapedLong(&'i str),
-    UnescapedShort(&'i str),
-}
-impl<'i> LiteralString<'i> {
-    pub fn is_escaped(&self) -> bool {
-        match self {
-            Self::Escaped(_) => true,
-            _ => false,
-        }
+pub struct LiteralString(String);
+impl LiteralString {
+    pub fn from_already_escaped(s: &str) -> Self {
+        LiteralString(String::from(s))
     }
-    pub fn escape(&self) -> Self {
-        match self {
-            Self::UnescapedShort(s) => LiteralString::escape_short(s),
-            Self::UnescapedLong(s) => LiteralString::escape_long(s),
-            Self::Escaped(_) => panic!("This LiteralString is already escaped!"),
-        }
-    }
-    fn escape_short(s: &'i str) -> Self {
+    pub fn from_escape_short(s: &str) -> Self {
         let mut res = Vec::with_capacity(s.len());
         let mut bytes = s.bytes().peekable();
 
@@ -326,37 +283,39 @@ impl<'i> LiteralString<'i> {
             };
         }
 
-        LiteralString::Escaped(String::from_utf8(res).unwrap())
+        LiteralString(String::from_utf8(res).unwrap())
     }
-    fn escape_long(s: &'i str) -> Self {
+    pub fn from_escape_long(s: &str) -> Self {
         let mut res = Vec::with_capacity(s.len());
-        let mut bytes = s.bytes().peekable();
+        let bytes = s.as_bytes();
+        let mut cursor = 0;
+        const LF: u8 = 10;
+        const CR: u8 = 13;
 
         // For convenience, when the opening long bracket is immediately followed by a newline, the newline is not included in the string.
-        if let Some(10_u8) = bytes.peek() {
-            bytes.next();
-        }
-
-        // Any kind of end-of-line sequence (carriage return, newline, carriage return followed by newline, or newline followed by carriage return) is converted to a simple newline.
-        while let Some(b) = bytes.next() {
-            match b {
-                10_u8 => {
-                    if let Some(&13_u8) = bytes.peek() {
-                        bytes.next();
-                    }
-                    res.push(10_u8);
-                },
-                13_u8 => {
-                    if let Some(&10_u8) = bytes.peek() {
-                        bytes.next();
-                    }
-                    res.push(10_u8);
-                },
-                _ => res.push(b),
+        if let Some(&b @ (LF | CR)) = bytes.get(cursor) {
+            if let Some(&b2 @ (LF | CR)) = bytes.get(cursor+1) && b2 != b {
+                cursor+=2;
+            } else {
+                cursor+=1;
             }
         }
 
-        LiteralString::Escaped(String::from_utf8(res).unwrap())
+        // Any kind of end-of-line sequence (carriage return, newline, carriage return followed by newline, or newline followed by carriage return) is converted to a simple newline.
+        while let Some(&b) = bytes.get(cursor) {
+            cursor+=1;
+            let (LF | CR) = b else {
+                res.push(b);
+                continue;
+            };
+
+            if let Some(&b2 @ (LF | CR)) = bytes.get(cursor) && b2 != b {
+                cursor+=1;
+            }
+            res.push(LF);
+        }
+
+        LiteralString(String::from_utf8(res).unwrap())
     }
 }
 
@@ -366,15 +325,18 @@ pub struct Span<'i>(pub &'i str);
 
 #[derive(Debug, PartialEq)]
 pub struct Token<'i> {
-    kind: TokenKind<'i>,
+    kind: TokenKind,
     span: Span<'i>,
 }
 impl<'i> Token<'i> {
-    pub fn new(kind: TokenKind<'i>, span: Span<'i>) -> Self {
+    pub fn new(kind: TokenKind, span: Span<'i>) -> Self {
         return Token { kind, span };
     }
     pub fn get_kind(&self) -> &TokenKind {
         return &self.kind;
+    }
+    pub fn take_kind(self) -> TokenKind {
+        self.kind
     }
     pub fn get_span(&self) -> Span<'i> {
         return self.span;
@@ -402,6 +364,9 @@ impl<'i> Lexer<'i> {
     }
     pub fn iter_tokens(&self) -> core::slice::Iter<Token<'i>> {
         self.tokens.iter()
+    }
+    pub fn iter_mut_tokens(&mut self) -> std::slice::IterMut<'_, Token<'i>> {
+        self.tokens.iter_mut()
     }
     pub fn view_len(&self) -> usize {
         self.view.len()
@@ -444,30 +409,47 @@ impl<'i> Lexer<'i> {
         return l1 != self.view.len()
     }
     pub fn lex_identifier_or_keyword(&mut self) -> Option<Token<'i>> {
-        let mut found = None;
+        let bytes = self.view.as_bytes();
 
-        let chars = self.view.char_indices();
-        for (c_start_byte,c) in chars {
-            if c_start_byte == 0 && !c.is_alphabetic() {
-                break;
-            }
-            if ! (c.is_alphanumeric() || c == '_') {
-                break;
-            }
-            found = Some(
-                &self.view[..self.view.ceil_char_boundary(c_start_byte+c.len_utf8())]//wouldn't +1 work just as well here?
-            )
+        let &b = bytes.first()?;
+        if !(b.is_ascii_alphabetic() || b == b'_') {
+            return None;
+        }
+
+        let n = bytes.iter()
+            .take_while(|&&b| b.is_ascii_alphanumeric() || b == b'_')
+            .count();
+        
+        let something_str = &self.view[..n];
+        self.view = &self.view[n..];
+
+        let kind = match something_str {
+            "and" => TokenKind::Keyword(Keyword::And),
+            "break" => TokenKind::Keyword(Keyword::Break),
+            "do" => TokenKind::Keyword(Keyword::Do),
+            "elseif" => TokenKind::Keyword(Keyword::Elseif),
+            "else" => TokenKind::Keyword(Keyword::Else),
+            "end" => TokenKind::Keyword(Keyword::End),
+            "false" => TokenKind::Keyword(Keyword::False),
+            "for" => TokenKind::Keyword(Keyword::For),
+            "function" => TokenKind::Keyword(Keyword::Function),
+            "goto" => TokenKind::Keyword(Keyword::Goto),
+            "if" => TokenKind::Keyword(Keyword::If),
+            "in" => TokenKind::Keyword(Keyword::In),
+            "local" => TokenKind::Keyword(Keyword::Local),
+            "nil" => TokenKind::Keyword(Keyword::Nil),
+            "not" => TokenKind::Keyword(Keyword::Not),
+            "or" => TokenKind::Keyword(Keyword::Or),
+            "repeat" => TokenKind::Keyword(Keyword::Repeat),
+            "return" => TokenKind::Keyword(Keyword::Return),
+            "then" => TokenKind::Keyword(Keyword::Then),
+            "true" => TokenKind::Keyword(Keyword::True),
+            "until" => TokenKind::Keyword(Keyword::Until),
+            "while" => TokenKind::Keyword(Keyword::While),
+            _ => TokenKind::Identifier,
         };
 
-        found.and_then(|s| {
-            self.view = &self.view[s.len()..];
-
-            if let Some(keyword) = Keyword::from_str(s) {
-                Some(Token::new(TokenKind::Keyword(keyword), Span(s)))
-            } else {
-                Some(Token::new(TokenKind::Identifier, Span(s)))
-            }
-        })
+        Some(Token::new(kind, Span(something_str)))
     }
     pub fn lex_numeric_constant(&mut self) -> Option<Token<'i>> {
         let bytes = self.view.as_bytes();
@@ -501,7 +483,7 @@ impl<'i> Lexer<'i> {
             let bslashes = (&bytes[last_q_pos..new_q_pos]).iter()
                 .rev()
                 .take_while(|&&v| v == b'\\')
-                .fold(0_u64, |n,_|n+1);
+                .count();
 
             last_q_pos = new_q_pos;
 
@@ -516,186 +498,104 @@ impl<'i> Lexer<'i> {
         
         let contents = str::from_utf8(&bytes[1..last_q_pos]).unwrap();
         let span = &self.view[..contents.len()+2];
-        let contents_tokenkind = TokenKind::LiteralString(LiteralString::UnescapedShort(contents));
+        let contents_tokenkind = TokenKind::LiteralString(LiteralString::from_escape_short(contents));
 
         self.view = &self.view[span.len()..];
         Some(Token::new(contents_tokenkind, Span(span)))
     }
-
-    /// For convenience, when the opening long bracket is immediately followed by a newline, the newline is not included in the string. (same does not apply for short string)
     pub fn lex_long_literal_string(&mut self) -> Option<Token<'i>> {
-        let mut remains = self.view;
-        remains = remains.strip_prefix('[')?;
-
-        let mut opening_equals = 0;
-        while let Some(next_remains) = remains.strip_prefix('=') {
-            opening_equals += 1;
-            remains = next_remains;
-        }
-
-        remains = remains.strip_prefix('[')?;
-        let span_without_opening = remains;
-
-        let mut found_closing = false;
-        while !remains.is_empty() {
-            let Some(potential_closing_start) = remains.find(']') else {
-                // println!("we BREAKING");
-                break // when no more potential endings, end while loop
-            };
-            remains = &remains[potential_closing_start..];
-            let mut check_close = remains.strip_prefix(']').expect("`remains.find` check above ensures this will not panic");
-
-            let mut closing_equals = 0;
-            while let Some(next_check_close) = check_close.strip_prefix('=') {
-                closing_equals += 1;
-                check_close = next_check_close;
-            }
-
-            if closing_equals != opening_equals {
-                remains = &remains[1..];
-                continue;
-            }
-            if !check_close.starts_with(']') {
-                remains = &remains[1..];
-                continue;
-            }
-            remains = &remains[(2+opening_equals)..];
-            found_closing = true;
-            break;
-        }
-
-        if !found_closing {
+        let bytes = self.view.as_bytes();
+        let mut cursor = 0;
+        
+        let Some(b'[') = bytes.get(cursor) else {
             return None;
-        }
-
-        let span_len = self.view.len() - remains.len();
-        let span = &self.view[..span_len];
-        let end_len = 2+opening_equals;
-        let inner_content = &span_without_opening[..span_without_opening.len()-end_len];
-
-        self.view = &self.view[span.len()..];
-        Some(Token::new(TokenKind::LiteralString(LiteralString::UnescapedLong(inner_content)), Span(span)))
-    }
-    // pub fn lex_long_literal_string(&mut self) -> Option<Token<'i>> {
-    //     // looking at bytes is ok here because we look for '[', ']', '=', which are all ascii and-
-    //     // cannot be confused for any part of anything that utf8 encodes anything else to
-    //     let bytes = self.view.as_bytes();
-        
-    //     if bytes.first() != Some(&b'[') {
-    //         return None;
-    //     }
-    //     let mut opening_equals = 0;
-    //     let mut opened = false;
-    //     for &b in bytes[1..].iter() {
-    //         match b {
-    //             b'=' => opening_equals += 1,
-    //             b'[' => {
-    //                 opened = true;
-    //                 break
-    //             },
-    //             _ => return None, // e.g. [==a or [a
-    //         }
-    //     }
-    //     if !opened {
-    //         return None; // didn't complete the opening to the string
-    //     }
-
-    //     let start_length = opening_equals+2;
-    //     let mut search_place = start_length;
-    //     while let Some(pos) = (&self.view[search_place..]).find(']') {
-    //         let pos = search_place+pos;
-    //         if start_length > (&self.view[pos..]).len() {
-    //             break; // the end sequence (same length as start sequence) cannot fit in what remains
-    //         }
-    //         let potential_closing = &bytes[pos..=pos+start_length];
-    //         println!("Checking {}",str::from_utf8(potential_closing).unwrap());
-
-    //         let found_closing = potential_closing[pos+start_length] == b']' &&
-    //             potential_closing[(pos+1)..pos+start_length].iter().all(|&b| b == b'=');
-            
-    //         if !found_closing {
-    //             search_place = pos + 1; // false match, keep looking
-    //             continue;
-    //         }
-
-    //         let inner_content = &self.view[start_length..pos+start_length];
-    //         let span = &self.view[..pos+start_length];
-    //         println!("Succeeded, span: {}",span);
-    //     }
-
-    //     None
-    // }
-    pub fn lex_symbol(&mut self) -> Option<Token<'i>> {
-        let symbol_patterns = [
-            (Symbol::Plus, "+", 1),
-            (Symbol::Dash, "-", 1),
-            (Symbol::Star, "*", 1),
-            (Symbol::Slash, "/", 1),
-            (Symbol::Percent, "%", 1),
-            (Symbol::Caret, "^", 1),
-            (Symbol::Hashtag, "#", 1),
-            (Symbol::Ampersand, "&", 1),
-            (Symbol::Tilde, "~", 1),
-            (Symbol::Pipe, "|", 1),
-            (Symbol::LShift, "<<", 2),
-            (Symbol::RShift, ">>", 2),
-            (Symbol::SlashSlash, "//", 2),
-            (Symbol::EqualsEquals, "==", 2),
-            (Symbol::NotEquals, "~=", 2),
-            (Symbol::LessOrEquals, "<=", 2),
-            (Symbol::GreaterOrEquals, ">=", 2),
-            (Symbol::LessThan, "<", 1),
-            (Symbol::GreaterThan, ">", 1),
-            (Symbol::Equals, "=", 1),
-            (Symbol::LParen, "(", 1),
-            (Symbol::RParen, ")", 1),
-            (Symbol::LCurly, "{", 1),
-            (Symbol::RCurly, "}", 1),
-            (Symbol::LBracket, "[", 1),
-            (Symbol::RBracket, "]", 1),
-            (Symbol::Semicolon, ";", 1),
-            (Symbol::Colon, ":", 1),
-            (Symbol::ColonColon, "::", 2),
-            (Symbol::Comma, ",", 1),
-            (Symbol::Dot, ".", 1),
-            (Symbol::DotDot, "..", 2),
-            (Symbol::DotDotDot, "...", 3),
-        ];
-
-        let mut found: Option<(Symbol, u8, &'i str)> = None;
-        for (kind, str_pattern, preference) in symbol_patterns {
-                        
-            if str_pattern.len() > self.view.len() {
-                continue;
-            }
-
-            let this_token_view = &self.view[0..=str_pattern.len()-1];
-            let matches_this_pattern = this_token_view == str_pattern;
-
-            if !matches_this_pattern {
-                continue;
-            }
-            if found.is_none() {
-                found = Some((kind, preference, this_token_view));
-                continue;
-            }
-
-            let (found_kind,found_preference, _) = found.unwrap();
-
-            if kind == found_kind && preference > found_preference {
-                found = Some((kind, preference, this_token_view));
-                continue;
-            }
         };
-        
-        if let Some((kind, _, token_view)) = found {
-            // not -1 after token_view.len(), because while token_view.len() is one past token_view, that is perfect as we want the index 1 after token_view
-            // more of a note to self
-            self.view = &self.view[token_view.len()..=(self.view.len()-1)];
-            Some( Token::new(TokenKind::Symbol(kind), Span(token_view)) )
-        } else {
-            None
+        cursor+=1;
+
+        let opening_eq = (&bytes[cursor..]).iter()
+            .take_while(|&&v| v == b'=')
+            .count();
+        cursor+=opening_eq;
+
+        let Some(b'[') = bytes.get(cursor) else {
+            return None;
+        };
+        cursor+=1;
+
+
+        while let Some(&b) = bytes.get(cursor) {
+            cursor+=1;
+            if b != b']' {
+                continue;
+            }
+            
+            let closing_eq = (&bytes[cursor..]).iter()
+                .take_while(|&&v| v == b'=')
+                .count();
+            cursor+=closing_eq;
+            
+            if opening_eq != closing_eq {
+                continue;
+            }
+
+            if let Some(b']') = bytes.get(cursor) {
+                cursor+=1;
+                let ends_len = opening_eq+2;
+                
+                let span = &self.view[..cursor];
+                let inner_content = &self.view[ends_len..cursor-ends_len];
+
+                self.view = &self.view[cursor..];
+                return Some(Token::new(TokenKind::LiteralString(LiteralString::from_escape_long(inner_content)), Span(span)))
+            };
         }
+        return None;
+    }
+    pub fn lex_symbol(&mut self) -> Option<Token<'i>> {
+        let (sym,sym_len) = match self.view.as_bytes() {
+            [b'.', b'.', b'.', ..] => (Symbol::DotDotDot,3),
+
+            [b'<', b'<', ..] => (Symbol::LShift,2),
+            [b'>', b'>', ..] => (Symbol::RShift,2),
+            [b'/', b'/', ..] => (Symbol::SlashSlash,2),
+            [b'=', b'=', ..] => (Symbol::EqualsEquals,2),
+            [b'~', b'=', ..] => (Symbol::NotEquals,2),
+            [b'<', b'=', ..] => (Symbol::LessOrEquals,2),
+            [b'>', b'=', ..] => (Symbol::GreaterOrEquals,2),
+            [b':', b':', ..] => (Symbol::ColonColon,2),
+            [b'.', b'.', ..] => (Symbol::DotDot,2),
+
+            [b'+', ..] => (Symbol::Plus, 1),
+            [b'-', ..] => (Symbol::Dash, 1),
+            [b'*', ..] => (Symbol::Star, 1),
+            [b'/', ..] => (Symbol::Slash, 1),
+            [b'%', ..] => (Symbol::Percent, 1),
+            [b'^', ..] => (Symbol::Caret, 1),
+            [b'#', ..] => (Symbol::Hashtag, 1),
+            [b'&', ..] => (Symbol::Ampersand, 1),
+            [b'~', ..] => (Symbol::Tilde, 1),
+            [b'|', ..] => (Symbol::Pipe, 1),
+            [b'<', ..] => (Symbol::LessThan, 1),
+            [b'>', ..] => (Symbol::GreaterThan, 1),
+            [b'=', ..] => (Symbol::Equals, 1),
+            [b'(', ..] => (Symbol::LParen, 1),
+            [b')', ..] => (Symbol::RParen, 1),
+            [b'{', ..] => (Symbol::LCurly, 1),
+            [b'}', ..] => (Symbol::RCurly, 1),
+            [b'[', ..] => (Symbol::LBracket, 1),
+            [b']', ..] => (Symbol::RBracket, 1),
+            [b';', ..] => (Symbol::Semicolon, 1),
+            [b':', ..] => (Symbol::Colon, 1),
+            [b',', ..] => (Symbol::Comma, 1),
+            [b'.', ..] => (Symbol::Dot, 1),
+
+            _ => return None,
+        };
+
+        let sym_str = &self.view[..sym_len];
+        self.view = &self.view[sym_len..];
+
+        Some(Token::new(TokenKind::Symbol(sym), Span(sym_str)))
     }
     fn skip_comments(&mut self) -> bool {
         let bytes = self.view.as_bytes();
@@ -780,14 +680,17 @@ impl<'i> Lexer<'i> {
         if int_part_bs.len() == 0 && frac_part_bs.len() == 0 {
             panic!("decimal numeric constant needs at least an integer or fractional part !");
         }
-
-        if bytes.get(cursor) == Some(&(b'e'|b'E')) {
+        if let [b'e'|b'E', ..] = &bytes[cursor..] {
             cursor+=1;
+            if let &[sign @ (b'+'|b'-'), ..] = &bytes[cursor..] {
+                cursor+=1;
+                exp_part_bs.push(sign);
+            }
             while let Some(&b) = bytes.get(cursor) {
+                cursor+=1;
                 if !b.is_ascii_digit() {
                     break;
                 }
-                cursor+=1;
                 exp_part_bs.push(b);
             }
         }
