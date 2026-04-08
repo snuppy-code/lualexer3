@@ -177,8 +177,8 @@ b""#;
     
     #[test]
     fn test_complicated_long_string() {
-        let s = "[==[\x0A\x0D [abc\x0A \x0D \x0D\x0A \x0A\x0Dabc] ]==]";
-        let s_escaped = " [abc\x0A \x0A \x0A \x0Aabc] ";
+        let s = "[==[\x0A\x0D [--abc\x0A --[\x0D \x0D\x0A]=] \x0A\x0Dabc] ]==]";
+        let s_escaped = " [--abc\x0A --[\x0A \x0A]=] \x0Aabc] ";
         let mut l = Lexer::new(s);
 
         l.lex_to_end();

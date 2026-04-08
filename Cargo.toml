@@ -5,3 +5,10 @@ edition = "2024"
 
 [dependencies]
 hexf-parse = "0.2.1"
+
+[dev-dependencies]
+criterion = { version = "0.8.2" }
+
+[[bench]]
+name = "basic_perf_test"
+harness = false

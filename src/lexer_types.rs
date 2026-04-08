@@ -386,7 +386,7 @@ impl<'i> Lexer<'i> {
         }
     }
     fn lex_one(&mut self) -> bool {
-        while self.skip_whitespace() || self.skip_comments() { }
+        while self.skip_whitespace() || self.skip_comment() {};
 
         let res = self
             .lex_identifier_or_keyword()
@@ -597,7 +597,7 @@ impl<'i> Lexer<'i> {
 
         Some(Token::new(TokenKind::Symbol(sym), Span(sym_str)))
     }
-    fn skip_comments(&mut self) -> bool {
+    fn skip_comment(&mut self) -> bool {
         let bytes = self.view.as_bytes();
         
         if !bytes.starts_with(b"--") {
