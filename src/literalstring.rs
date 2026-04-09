@@ -1,10 +1,12 @@
+use crate::{lexer_errors::LexerError, token::{Span, Token}, token_kind::TokenKind};
+
 #[derive(Debug, PartialEq)]
 pub struct LiteralString(String);
 impl LiteralString {
     pub fn from_already_escaped(s: &str) -> Self {
         LiteralString(String::from(s))
     }
-    pub fn from_escape_short(s: &str) -> Self {
+    pub fn from_escape_short(s: &str) -> Result<Self,LexerError> {
         let mut res = Vec::with_capacity(s.len());
         let mut bytes = s.bytes().peekable();
 
@@ -48,7 +50,7 @@ impl LiteralString {
                 b'u' => {
                     let open_brace = bytes.next();
                     if !(open_brace.is_some() && open_brace.unwrap() == b'{') {
-                        panic!("Invalid \\u escape sequence! Missing opening brace")
+                        return Err(LexerError::InvalidStringuEscapeMissingOpenBrace);
                     }
 
                     let mut usv_hex: u32 = 0;
@@ -61,7 +63,7 @@ impl LiteralString {
                             break;
                         }
                         if !c.is_ascii_hexdigit() {
-                            panic!("Invalid character in \\u escape sequence!");
+                            return Err(LexerError::InvalidStringuEscapeInvalidChar);
                         }
                         let d = (c as char).to_digit(16).unwrap();
                         usv_hex = (usv_hex << 4) | d;
@@ -69,15 +71,15 @@ impl LiteralString {
                     }
 
                     if !found_closing {
-                        panic!("Invalid \\u escape sequence! Missing closing brace")
+                        return Err(LexerError::InvalidStringuEscapeMissingClosingBrace);
                     }
                     if !encountered_digit {
-                        panic!("Invalid \\u escape sequence! No digits")
+                        return Err(LexerError::InvalidStringuEscapeNoDigits);
                     }
                     // I'm reasonably sure the limit is 0x10FFFF, not 0x7FFFFFFF in 5.3. I won't test it in 5.3 💔, it's just what I gather from the lua source code and testing in 5.4
                     // see:   readutf8esc   https://www.lua.org/source/5.3/llex.c.html   https://www.lua.org/source/5.4/llex.c.html/
                     if usv_hex > 0x10FFFF {
-                        panic!("Invalid \\u escape sequence! beyond lua 5.3 0x10FFFF limit!");
+                        return Err(LexerError::InvalidStringuEscapeBeyond0x10FFFF);
                     }
 
                     let usv = char::from_u32(usv_hex)
@@ -98,7 +100,9 @@ impl LiteralString {
                         len += 1;
                     }
                     let s = str::from_utf8(&decimals_b[..len]).unwrap();
-                    let v = u8::from_str_radix(s, 10).expect("Invalid decimal escape! out of u8 range");
+                    let Ok(v) = u8::from_str_radix(s, 10) else {
+                        return Err(LexerError::InvalidStringDecimalEscapeBeyondu8);
+                    };
                     res.push(v);
                 },
 
@@ -106,9 +110,9 @@ impl LiteralString {
             };
         }
 
-        LiteralString(String::from_utf8(res).unwrap())
+        Ok(LiteralString(String::from_utf8(res).unwrap()))
     }
-    pub fn from_escape_long(s: &str) -> Self {
+    pub fn from_escape_long(s: &str) -> Result<Self,LexerError> {
         let mut res = Vec::with_capacity(s.len());
         let bytes = s.as_bytes();
         let mut cursor = 0;
@@ -138,6 +142,93 @@ impl LiteralString {
             res.push(LF);
         }
 
-        LiteralString(String::from_utf8(res).unwrap())
+        Ok(LiteralString(String::from_utf8(res).unwrap()))
     }
+}
+
+pub fn lex_short_literal_string<'i>(view: &'i str) -> Result<Option<(Token<'i>,&'i str)>,LexerError> {
+    let bytes = view.as_bytes();
+    
+    let Some(&quote @ (b'\"' | b'\'')) = bytes.get(0) else {
+        return Ok(None);
+    };
+
+    let mut last_q_pos = 0;
+    let mut found_end = false;
+    while let Some(new_q_pos) = bytes.iter().enumerate().position(|(i,&b)| b==quote && i>last_q_pos) {
+        
+        // imprecise lower bound, which is okay because we look backwards through the iterator.
+        let bslashes = (&bytes[last_q_pos..new_q_pos]).iter()
+            .rev()
+            .take_while(|&&v| v == b'\\')
+            .count();
+
+        last_q_pos = new_q_pos;
+
+        if bslashes%2 == 0 {
+            found_end = true;
+            break;
+        }
+    }
+    if !found_end {
+        return Err(LexerError::Inv);
+    }
+    
+    let contents = str::from_utf8(&bytes[1..last_q_pos]).unwrap();
+    let span = &view[..contents.len()+2];
+    let contents_tokenkind = TokenKind::LiteralString(LiteralString::from_escape_short(contents)?);
+
+    let new_view = &view[span.len()..];
+    Ok(Some((Token::new(contents_tokenkind, Span(span)),new_view)))
+}
+pub fn lex_long_literal_string<'i>(view: &'i str) -> Result<Option<(Token<'i>,&'i str)>,LexerError> {
+    let bytes = view.as_bytes();
+    let mut cursor = 0;
+    
+    let Some(b'[') = bytes.get(cursor) else {
+        return Ok(None);
+    };
+    cursor+=1;
+
+    let opening_eq = (&bytes[cursor..]).iter()
+        .take_while(|&&v| v == b'=')
+        .count();
+    cursor+=opening_eq;
+
+    let Some(b'[') = bytes.get(cursor) else {
+        return Ok(None);
+    };
+    cursor+=1;
+
+
+    while let Some(&b) = bytes.get(cursor) {
+        cursor+=1;
+        if b != b']' {
+            continue;
+        }
+        
+        let closing_eq = (&bytes[cursor..]).iter()
+            .take_while(|&&v| v == b'=')
+            .count();
+        cursor+=closing_eq;
+        
+        if opening_eq != closing_eq {
+            continue;
+        }
+
+        if let Some(b']') = bytes.get(cursor) {
+            cursor+=1;
+            let ends_len = opening_eq+2;
+            
+            let span = &view[..cursor];
+            let inner_content = &view[ends_len..cursor-ends_len];
+
+            let new_view = &view[cursor..];
+            return Ok(Some((
+                Token::new(TokenKind::LiteralString(LiteralString::from_escape_long(inner_content)?), Span(span)),
+                new_view
+            )))
+        };
+    }
+    return Ok(None); // should I maybe panic here instead?
 }

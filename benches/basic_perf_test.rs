@@ -1,20 +1,11 @@
 use std::{fs, hint::black_box};
 use criterion::{criterion_group, criterion_main, Criterion};
-use luide3::lexer::Lexer;
+use lualex3::lexer::Lexer;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let names = [
-        "./example_code/Electronic Vision Assistance A.lua",
-        "./example_code/Emission Tracking System A.lua",
-        "./example_code/KAI 10A Guidance.lua",
-        "./example_code/Tactical Situation Display A.lua",
-        "./example_code/Target Viewing Camera.lua",
-        "./example_code/Track While Scan A.lua",
-        "./example_code/vamperion fcs 2.lua",
-        "./example_code/Vamperion Hardpoint Controller A.lua",
-    ];
-    let full_code = names.iter()
-        .map(|&name| fs::read_to_string(name).unwrap())
+    let full_code = fs::read_dir("example_lua_code/").unwrap()
+        .filter_map(|v| v.map(|e| e.path()).ok())
+        .map(|p| std::fs::read_to_string(p).unwrap())
         .fold(String::new(), |a,v| a+" "+&v);
 
     c.bench_function("full eiss", |b| b.iter(|| {
