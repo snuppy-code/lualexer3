@@ -1,6 +1,5 @@
 target/
 Cargo.lock
-examples/scratchpad.rs
 flamegraph.svg
 perf.data
 perf.data.old
