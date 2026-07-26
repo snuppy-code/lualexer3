@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ariadne = "0.6.0"
 hexf-parse = "0.2.1"
 # pprof = "0.15.0"
 
