@@ -1,4 +1,4 @@
-use crate::{
+use super::{
     lexer_errors::LexerErrorKind,
     token::{Span, Token},
     token_kind::TokenKind,

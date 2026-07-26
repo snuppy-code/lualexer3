@@ -1,4 +1,4 @@
-use crate::{
+use super::{
     lexer_errors::LexerErrorKind,
     token::{Span, Token},
     token_kind::TokenKind,
@@ -9,7 +9,9 @@ pub enum NumericConstant {
     Integer(i64),
     Float(f64),
 }
-pub fn lex_numeric_constant<'i>(view: &'i str) -> Result<Option<(Token<'i>, &'i str)>, LexerErrorKind> {
+pub fn lex_numeric_constant<'i>(
+    view: &'i str,
+) -> Result<Option<(Token<'i>, &'i str)>, LexerErrorKind> {
     let bytes = view.as_bytes();
 
     if bytes.starts_with(b"0x") || bytes.starts_with(b"0X") {

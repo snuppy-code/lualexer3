@@ -1,19 +1,16 @@
 [package]
-name = "lualex3"
+name = "luaminifier2"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 ariadne = "0.6.0"
 hexf-parse = "0.2.1"
-# pprof = "0.15.0"
+slotmap = "1.1.1"
 
 [dev-dependencies]
 criterion = { version = "0.8.2" }
 
-# [profile.release]
-# debug = true
-
 [[bench]]
-name = "basic_perf_test"
+name = "lexer_basic"
 harness = false

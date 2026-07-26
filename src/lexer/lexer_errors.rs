@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::token::Span;
+use super::token::Span;
 
 #[derive(Debug, PartialEq)]
 pub struct LexerError<'i> {
