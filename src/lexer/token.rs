@@ -1,6 +1,5 @@
-use std::fmt::Display;
-
 use super::token_kind::TokenKind;
+use std::fmt::Display;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Span<'i>(pub &'i str);

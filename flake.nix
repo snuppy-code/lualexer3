@@ -1,7 +1,5 @@
-# I should read this ! I didn't !
-# https://fasterthanli.me/series/building-a-rust-service-with-nix/part-10
 {
-  description = "lualexer3 development flake";
+  description = "luaminifier2 development flake";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
