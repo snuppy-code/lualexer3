@@ -1,9 +1,12 @@
-pub mod symbol;
+pub mod change;
+pub mod comment;
 pub mod keyword;
-pub mod literalstring;
-pub mod numeric_constant;
-pub mod token_kind;
-pub mod token;
 pub mod lexer;
 pub mod lexer_errors;
+pub mod literalstring;
+pub mod numeric_constant;
+pub mod symbol;
+pub mod token;
+pub mod token_kind;
 mod util;
+pub mod whitespace;

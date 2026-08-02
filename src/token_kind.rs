@@ -1,16 +1,18 @@
 use crate::{
-    keyword::Keyword, lexer_errors::LexerErrorKind, literalstring::LiteralString,
-    numeric_constant::NumericConstant, symbol::Symbol,
+    comment::Comment, keyword::Keyword, lexer_errors::LexerErrorKind, literalstring::LiteralString,
+    numeric_constant::NumericConstant, symbol::Symbol, whitespace::Whitespace,
 };
 
 #[derive(Debug, PartialEq)]
-pub enum TokenKind {
+pub enum TokenKind<'i> {
     Keyword(Keyword),
     Symbol(Symbol),
     LiteralString(LiteralString),
     NumericConstant(NumericConstant),
     Identifier,
     Error(LexerErrorKind),
+    Comment(Comment<'i>),
+    Whitespace(Whitespace<'i>),
 }
 impl TokenKind {
     pub fn get_keyword(&self) -> Option<&Keyword> {

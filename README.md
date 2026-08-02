@@ -1,4 +1,4 @@
-I'm workin 'ere!
+Oh god the horrors
 
 Resources:
 - https://www.lua.org/manual/5.3/manual.html
@@ -30,3 +30,8 @@ Notes to self:
 - bacon
 - echo '-1' | sudo tee /proc/sys/kernel/perf_event_paranoid
 - samply record ./target/release/examples/scratchpad
+
+todo
+- make tokens store kind, token string slice, and line/col
+- option for whether or not to also emit comment, whitespace tokens.
+-
